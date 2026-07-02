@@ -1,11 +1,13 @@
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
-DATABASE_URL = "postgresql+psycopg2://postgres:Password123@localhost:5432/retailsignal"
+DATABASE_URL = "postgresql+psycopg2://postgres:password123@localhost:5432/retailsignal"
 DATA_PATH = "data/raw"
 
 engine = create_engine(DATABASE_URL)
-
+with engine.connect() as conn:
+    conn.execute(text("TRUNCATE TABLE fact_orders, fact_payments, fact_reviews, dim_customers, dim_products, dim_sellers, dim_date CASCADE"))
+    conn.commit()
 
 customers_df = pd.read_csv(f"{DATA_PATH}/olist_customers_dataset.csv")
 orders_df = pd.read_csv(f"{DATA_PATH}/olist_orders_dataset.csv")
@@ -55,3 +57,13 @@ dim_date_df['month'] = dim_date_df['full_date'].dt.month
 dim_date_df['year'] = dim_date_df['full_date'].dt.year
 dim_date_df['quarter'] = dim_date_df['full_date'].dt.quarter
 dim_date_df['month_name'] = dim_date_df['full_date'].dt.month_name()
+
+dim_date = dim_date_df.to_sql('dim_date', engine, if_exists='append', index=False)
+dim_customers = customers_df.to_sql('dim_customers', engine, if_exists='append', index=False)
+
+products_df = products_df[['product_id', 'product_category_name_english', 'product_weight_g', 'product_length_cm', 'product_height_cm', 'product_width_cm']]
+products_df.to_sql('dim_products', engine, if_exists='append', index=False)
+sellers_df.to_sql('dim_sellers', engine, if_exists='append', index=False)
+
+orders_df['purchase_date'] = orders_df['order_purchase_timestamp'].dt.date
+dim_date_keys = pd.read_sql("SELECT date_key, full_date FROM dim_date", engine)
